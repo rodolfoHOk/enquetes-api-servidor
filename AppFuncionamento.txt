@@ -1,0 +1,20 @@
+ 
+Uma visão geral do mecanismo de segurança que vamos construir.
+
+    Construa uma API que registre novos usuários com seu nome, nome de usuário, e-mail e senha.
+
+    Crie uma API para permitir que os usuários façam login usando seu nome de usuário / e-mail e senha. Depois de validar as credenciais do usuário, a API deve gerar um token de autenticação JWT e retornar o token na resposta.
+
+    Os clientes enviarão este token JWT no cabeçalho de autorização de todas as solicitações para acessar quaisquer recursos protegidos.
+
+    Configure a segurança Spring para restringir o acesso a recursos protegidos. Por exemplo,
+
+        APIs para login, inscrição e quaisquer recursos estáticos como imagens, scripts e folhas de estilo devem ser acessíveis a todos.
+
+        APIs para criar uma enquete, votar em uma enquete, etc., devem ser acessíveis apenas a usuários autenticados.
+
+    Configure a segurança do Spring para lançar um erro 401 não autorizado se um cliente tentar acessar um recurso protegido sem um token JWT válido.
+
+    Configure a autorização baseada em função para proteger os recursos no servidor. Por exemplo -
+        Apenas usuários com a função ADMIN podem criar uma enquete (observe que, o projeto de demonstração disponível no Github e AWS não requer a função ADMIN para criar uma enquete, mas você pode facilmente alterar esse comportamento).
+        Apenas usuários com a função USUÁRIO podem votar em uma enquete.
