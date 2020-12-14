@@ -64,6 +64,10 @@ public class Usuario extends DataAudit {
 			inverseJoinColumns = @JoinColumn(name = "funcao_id"))
 	private Set<Funcao> funcoes = new HashSet<Funcao>();
 	
+	// adicionado para verificação de email antes de habilitar conta do usuário.
+	@Column(name = "habilitado")
+	private boolean habilitado;
+	
 	public Usuario() {
 		
 	}
@@ -123,4 +127,12 @@ public class Usuario extends DataAudit {
 		this.funcoes = funcoes;
 	}
 
+	// adicionados para verificação de email antes de habilitar conta do usuário.
+	public boolean isHabilitado() {
+		return habilitado;
+	}
+
+	public void setHabilitado(boolean habilitado) {
+		this.habilitado = habilitado;
+	}
 }
