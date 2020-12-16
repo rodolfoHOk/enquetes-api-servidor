@@ -37,7 +37,9 @@ import br.com.hioktec.votacao.repositorio.TokenConfirmacaoRepository;
 import br.com.hioktec.votacao.repositorio.UsuarioRepository;
 import br.com.hioktec.votacao.requisicao.CadastroRequest;
 import br.com.hioktec.votacao.requisicao.LoginRequest;
+import br.com.hioktec.votacao.requisicao.MudarSenhaRequest;
 import br.com.hioktec.votacao.requisicao.ReenviarEmailRequest;
+import br.com.hioktec.votacao.requisicao.ResgatarSenhaRequest;
 import br.com.hioktec.votacao.resposta.ApiResponse;
 import br.com.hioktec.votacao.resposta.AutenticacaoJWTResponse;
 import br.com.hioktec.votacao.seguranca.JwtTokenProvider;
@@ -148,14 +150,15 @@ public class AutenticacaoController {
 							+ usuarioCadastrado.getEmail()));
 	}
 	
-	@GetMapping("/confirmar-conta")
+	@GetMapping("/confirmar-conta") // adicionado verificacao de email
 	public ResponseEntity<?> confirmarContaUsuario(@RequestParam("token") String token) {
 		
-		Optional<TokenConfirmacao> tokenConfirmacao = tokenConfirmacaoRepository.findByToken(token);
+		Optional<TokenConfirmacao> buscaTokenConfirmacao = tokenConfirmacaoRepository.findByToken(token);
 		
-		if(tokenConfirmacao.isPresent()) {
+		if(buscaTokenConfirmacao.isPresent()) {
 			Date agora = new Date(Calendar.getInstance().getTime().getTime());
-			Date expiracaoToken = tokenConfirmacao.get().getDataExpiracao();
+			TokenConfirmacao tokenConfirmacao = buscaTokenConfirmacao.get();
+			Date expiracaoToken = tokenConfirmacao.getDataExpiracao();
 			if (agora.after(expiracaoToken)) {
 				URI uri = URI.create("http://localhost:3000/confirmacao-conta/erro");
 				HttpHeaders headers = new HttpHeaders();
@@ -163,10 +166,13 @@ public class AutenticacaoController {
 				return new ResponseEntity<>(headers, HttpStatus.TEMPORARY_REDIRECT);
 
 			}
-			Optional<Usuario> consultaUsuario = usuarioRepository.findByEmail(tokenConfirmacao.get().getUsuario().getEmail());
+			Optional<Usuario> consultaUsuario = usuarioRepository.findByEmail(tokenConfirmacao.getUsuario().getEmail());
 			Usuario usuario = consultaUsuario.get();
 			usuario.setHabilitado(true);
 			usuarioRepository.save(usuario);
+			
+			tokenConfirmacao.setDataExpiracao(new Date(Calendar.getInstance().getTime().getTime()));
+			tokenConfirmacaoRepository.save(tokenConfirmacao);
 			
 			URI uri = URI.create("http://localhost:3000/confirmacao-conta/sucesso");
 			HttpHeaders headers = new HttpHeaders();
@@ -211,6 +217,80 @@ public class AutenticacaoController {
 			}
 		} else {
 			return ResponseEntity.badRequest().body(new ApiResponse(false, "Não existe cadastro com email informado"));
+		}
+	}
+	
+	@PostMapping("/esqueci-senha")
+	public ResponseEntity<?> esqueciSenha(@Valid @RequestBody ResgatarSenhaRequest resgatarSenhaRequest) {
+		
+		Optional<Usuario> consultaUsuario = usuarioRepository.findByEmail(resgatarSenhaRequest.getEmail());
+		if (consultaUsuario.isPresent()) {
+			// criar novo token de confirmacao para acessar mudar senha
+			Usuario usuario = consultaUsuario.get();
+			String token = UUID.randomUUID().toString();
+			TokenConfirmacao tokenConfirmacao = new TokenConfirmacao(token, usuario);
+			TokenConfirmacao tokenSalvo = tokenConfirmacaoRepository.save(tokenConfirmacao);
+			// criar email para verificacao e acesso a mudança de senha
+			SimpleMailMessage mensagemEmail = new SimpleMailMessage();
+			mensagemEmail.setTo(resgatarSenhaRequest.getEmail());
+			mensagemEmail.setSubject("Verificação de acesso a criação de nova senha");
+			mensagemEmail.setText("Para criar nova senha de acesso, click aqui: "
+					+ "http://localhost:5000/api/auten/mudar-senha?token=" + tokenSalvo.getToken());
+			// enviar email
+			envioEmailService.enviarEmail(mensagemEmail);
+			
+			return ResponseEntity.ok().body(new ApiResponse(true, "Enviado email para mudança de senha"));
+		} else {
+			return ResponseEntity.badRequest().body(new ApiResponse(false, "Não existe cadastro com email informado"));
+		}
+	}
+	
+	@GetMapping("/mudar-senha")
+	public ResponseEntity<?> acessarMudarSenha(@RequestParam("token") String token){
+		
+		Optional<TokenConfirmacao> consultaToken = tokenConfirmacaoRepository.findByToken(token);
+		if (consultaToken.isPresent()) {
+			TokenConfirmacao tokenConfirmacao = consultaToken.get();
+			Date agora = new Date(Calendar.getInstance().getTime().getTime());
+			if (agora.before(tokenConfirmacao.getDataExpiracao())) {
+				URI uri = URI.create("http://localhost:3000/mudar-senha/mudar?token=" 
+						+ tokenConfirmacao.getToken());
+				HttpHeaders headers = new HttpHeaders();
+				headers.setLocation(uri);
+				return new ResponseEntity<>(headers, HttpStatus.TEMPORARY_REDIRECT);
+			} else {
+				URI uri = URI.create("http://localhost:3000/mudar-senha/erro");
+				HttpHeaders headers = new HttpHeaders();
+				headers.setLocation(uri);
+				return new ResponseEntity<>(headers, HttpStatus.TEMPORARY_REDIRECT);
+			}
+		} else {
+			URI uri = URI.create("http://localhost:3000/mudar-senha/erro");
+			HttpHeaders headers = new HttpHeaders();
+			headers.setLocation(uri);
+			return new ResponseEntity<>(headers, HttpStatus.TEMPORARY_REDIRECT);
+		}
+	}
+	
+	@PostMapping("/mudar-senha")
+	public ResponseEntity<?> mudarSenha(@Valid @RequestBody MudarSenhaRequest mudarSenhaRequest) {
+		
+		Optional<TokenConfirmacao> consultaToken = tokenConfirmacaoRepository.findByToken(mudarSenhaRequest.getToken());
+		if (consultaToken.isPresent()) {
+			TokenConfirmacao tokenConfirmacao = consultaToken.get();
+			Date agora = new Date(Calendar.getInstance().getTime().getTime());
+			if (agora.before(tokenConfirmacao.getDataExpiracao())) {
+				Usuario usuario = tokenConfirmacao.getUsuario();
+				usuario.setSenha(passwordEncoder.encode(mudarSenhaRequest.getSenha()));
+				usuarioRepository.save(usuario);
+				tokenConfirmacao.setDataExpiracao(new Date(Calendar.getInstance().getTime().getTime()));
+				tokenConfirmacaoRepository.save(tokenConfirmacao);
+				return ResponseEntity.ok(new ApiResponse(true, "Nova Senha salva com sucesso"));
+			} else {
+				return ResponseEntity.badRequest().body(new ApiResponse(false, "Tempo para mudança de senha expirou"));
+			}
+		} else {
+			return ResponseEntity.badRequest().body(new ApiResponse(true, "Erro token de acesso não encontrado"));
 		}
 	}
 }
