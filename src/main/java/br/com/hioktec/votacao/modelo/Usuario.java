@@ -18,7 +18,7 @@ import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.Size;
 
-import org.hibernate.annotations.NaturalId;
+// import org.hibernate.annotations.NaturalId;
 
 import br.com.hioktec.votacao.modelo.audit.DataAudit;
 
@@ -46,7 +46,7 @@ public class Usuario extends DataAudit {
 	@Column(name = "nome_usuario")
 	private String nomeUsuario;
 	
-	@NaturalId
+	// @NaturalId removido para permitir edicao do email
 	@NotBlank
 	@Size(max = 40)
 	@Email
